@@ -153,7 +153,7 @@ scene.add(cityGroup);
 const DRONE_RADIUS = 0.25;
 const droneMesh = new THREE.Mesh(
     new THREE.SphereGeometry(DRONE_RADIUS, 16, 16),
-    new THREE.MeshBasicMaterial({ color: 0xff3355 })
+    new THREE.MeshBasicMaterial({ color: 0x00ffff })
 );
 scene.add(droneMesh);
 
