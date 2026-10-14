@@ -37,7 +37,10 @@
 
         <!-- 避障策略輸入區 -->
         <div id="code-area">
-            <label style="font-size: 0.82rem; font-weight: bold; color: #b0b0c0;">避障策略腳本</label>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <label style="font-size: 0.82rem; font-weight: bold; color: #b0b0c0;">避障策略腳本</label>
+                <span id="save-hint" style="font-size: 0.72rem; color: #00ff88; display: none;">已自動儲存</span>
+            </div>
             <textarea id="controller-code" spellcheck="false"></textarea>
         </div>
 
@@ -78,6 +81,13 @@
             <div>高度: <span id="flight-alt">6.25</span> / 25.0 m</div>
             <div>剩餘直線距離: <span id="hud-dist" style="color: #ffd700;">141.6</span> m</div>
         </div>
+
+        <!-- 視角切換器 -->
+        <div id="camera-modes">
+            <button class="cam-btn active" id="cam-orbit-btn">🌐 上帝全景</button>
+            <button class="cam-btn" id="cam-follow-btn">🎥 機載跟隨</button>
+        </div>
+
         <div id="controls-hint">操作：左鍵平移 | 右鍵旋轉 | 滾輪縮放</div>
     </div>
 
