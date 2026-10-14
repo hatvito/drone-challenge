@@ -269,6 +269,7 @@ textarea:focus {
     cursor: pointer;
     font-weight: bold;
     transition: all 0.2s;
+    white-space: nowrap;
 }
 
 .cam-btn:hover {
