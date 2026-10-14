@@ -88,18 +88,32 @@ class StudentController {
     }
 }`;
 
-// 載入 localStorage 暫存或預設代碼
+// 嚴格防呆載入：若為空字串或不存在，一律使用 DEFAULT_CONTROLLER_CODE
 const codeTextarea = document.getElementById('controller-code');
-const savedCode = localStorage.getItem('drone_student_code');
-codeTextarea.value = savedCode ? savedCode : DEFAULT_CONTROLLER_CODE;
+let savedCode = "";
+try {
+    savedCode = localStorage.getItem('drone_student_code') || "";
+} catch (e) {
+    savedCode = "";
+}
+
+if (!savedCode || savedCode.trim().length === 0) {
+    codeTextarea.value = DEFAULT_CONTROLLER_CODE;
+} else {
+    codeTextarea.value = savedCode;
+}
 
 let saveTimeout = null;
 codeTextarea.addEventListener('input', () => {
-    localStorage.setItem('drone_student_code', codeTextarea.value);
+    try {
+        localStorage.setItem('drone_student_code', codeTextarea.value);
+    } catch (e) {}
     const hint = document.getElementById('save-hint');
-    hint.style.display = 'inline';
-    clearTimeout(saveTimeout);
-    saveTimeout = setTimeout(() => hint.style.display = 'none', 1500);
+    if (hint) {
+        hint.style.display = 'inline';
+        clearTimeout(saveTimeout);
+        saveTimeout = setTimeout(() => hint.style.display = 'none', 1500);
+    }
 });
 
 // ------------------ 3D 視覺化場景初始化 ------------------
@@ -107,11 +121,11 @@ const viewer = document.getElementById('viewer');
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x0c0d10);
 
-const camera = new THREE.PerspectiveCamera(45, viewer.clientWidth / viewer.clientHeight, 1, 1000);
+const camera = new THREE.PerspectiveCamera(45, (viewer.clientWidth || 800) / (viewer.clientHeight || 600), 1, 1000);
 camera.position.set(50, 120, -50);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setSize(viewer.clientWidth, viewer.clientHeight);
+renderer.setSize(viewer.clientWidth || 800, viewer.clientHeight || 600);
 viewer.appendChild(renderer.domElement);
 
 const controls = new THREE.OrbitControls(camera, renderer.domElement);
@@ -149,7 +163,7 @@ scene.add(fenceLine);
 const cityGroup = new THREE.Group();
 scene.add(cityGroup);
 
-// 無人機 (實體球體，半徑 0.25m，亮青色 0x00ffff 與紅牆做強烈對比)
+// 無人機 (實體球體，半徑 0.25m，亮青色 0x00ffff)
 const DRONE_RADIUS = 0.25;
 const droneMesh = new THREE.Mesh(
     new THREE.SphereGeometry(DRONE_RADIUS, 16, 16),
@@ -230,6 +244,7 @@ function clearCrashVector() {
 }
 
 window.addEventListener('resize', () => {
+    if (!viewer.clientWidth || !viewer.clientHeight) return;
     camera.aspect = viewer.clientWidth / viewer.clientHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(viewer.clientWidth, viewer.clientHeight);
@@ -244,18 +259,17 @@ let activeVelocity = [1.0, 0.0, 1.0];
 function setCameraMode(mode) {
     cameraMode = mode;
     if (mode === 'orbit') {
-        camOrbitBtn.classList.add('active');
-        camFollowBtn.classList.remove('active');
+        if (camOrbitBtn) camOrbitBtn.classList.add('active');
+        if (camFollowBtn) camFollowBtn.classList.remove('active');
         controls.enabled = true;
         camera.position.set(50, 120, -50);
         controls.target.set(50, 0, 50);
         controls.update();
     } else {
-        camFollowBtn.classList.add('active');
-        camOrbitBtn.classList.remove('active');
+        if (camFollowBtn) camFollowBtn.classList.add('active');
+        if (camOrbitBtn) camOrbitBtn.classList.remove('active');
         controls.enabled = false;
         
-        // 切換時立即拉近相機
         const dp = droneMesh.position;
         let vx = activeVelocity[0], vz = activeVelocity[2];
         let vLen = Math.hypot(vx, vz) || 1.0;
@@ -264,8 +278,8 @@ function setCameraMode(mode) {
     }
 }
 
-camOrbitBtn.addEventListener('click', () => setCameraMode('orbit'));
-camFollowBtn.addEventListener('click', () => setCameraMode('follow'));
+if (camOrbitBtn) camOrbitBtn.addEventListener('click', () => setCameraMode('orbit'));
+if (camFollowBtn) camFollowBtn.addEventListener('click', () => setCameraMode('follow'));
 
 function animate() {
     requestAnimationFrame(animate);
@@ -527,11 +541,20 @@ function updateScoreboard(pos, status) {
     const remainHoriz = Math.hypot(GOAL_POS[0] - x, GOAL_POS[2] - z);
     const progress = Math.max(0, Math.min(100, ((BASE_TOTAL_DIST - remain3D) / BASE_TOTAL_DIST) * 100));
 
-    document.getElementById('hud-dist').innerText = remain3D.toFixed(1);
-    document.getElementById('score-remain-dist').innerText = `${remain3D.toFixed(2)} m`;
-    document.getElementById('score-horiz-dist').innerText = `${remainHoriz.toFixed(2)} m`;
-    document.getElementById('score-progress').innerText = `${progress.toFixed(1)} %`;
-    document.getElementById('score-status').innerText = status;
+    const hudDist = document.getElementById('hud-dist');
+    if (hudDist) hudDist.innerText = remain3D.toFixed(1);
+
+    const scoreRemain = document.getElementById('score-remain-dist');
+    if (scoreRemain) scoreRemain.innerText = `${remain3D.toFixed(2)} m`;
+
+    const scoreHoriz = document.getElementById('score-horiz-dist');
+    if (scoreHoriz) scoreHoriz.innerText = `${remainHoriz.toFixed(2)} m`;
+
+    const scoreProg = document.getElementById('score-progress');
+    if (scoreProg) scoreProg.innerText = `${progress.toFixed(1)} %`;
+
+    const scoreStat = document.getElementById('score-status');
+    if (scoreStat) scoreStat.innerText = status;
 
     return remain3D;
 }
@@ -545,11 +568,22 @@ function resetScene() {
     clearTrail();
     droneMesh.position.set(...START_POS);
     activeVelocity = [1.0, 0.0, 1.0];
-    document.getElementById('flight-status').innerText = "準備就緒";
-    document.getElementById('flight-status').style.color = "#bbb";
-    document.getElementById('flight-time').innerText = "0.00";
-    document.getElementById('flight-alt').innerText = START_POS[1].toFixed(2);
-    document.getElementById('download-log-btn').disabled = true;
+
+    const statusEl = document.getElementById('flight-status');
+    if (statusEl) {
+        statusEl.innerText = "準備就緒";
+        statusEl.style.color = "#bbb";
+    }
+
+    const timeEl = document.getElementById('flight-time');
+    if (timeEl) timeEl.innerText = "0.00";
+
+    const altEl = document.getElementById('flight-alt');
+    if (altEl) altEl.innerText = START_POS[1].toFixed(2);
+
+    const logBtn = document.getElementById('download-log-btn');
+    if (logBtn) logBtn.disabled = true;
+
     updateScoreboard(START_POS, "待命出發");
 
     if (cameraMode === 'follow') {
@@ -638,7 +672,9 @@ document.getElementById('run-btn').addEventListener('click', () => {
     let controllerInstance = null;
     try {
         const code = document.getElementById('controller-code').value;
-        localStorage.setItem('drone_student_code', code);
+        try {
+            localStorage.setItem('drone_student_code', code);
+        } catch (e) {}
         const factory = new Function(`${code}; return new StudentController([${GOAL_POS.join(',')}]);`);
         controllerInstance = factory();
     } catch (err) {
@@ -748,7 +784,7 @@ document.getElementById('run-btn').addEventListener('click', () => {
             return;
         }
 
-        // 任務超時判定 (延長為 200 秒)
+        // 任務超時判定 (200 秒)
         if (timer > 200.0) {
             clearInterval(simInterval);
             statusEl.innerText = "任務超時 (200s)";
@@ -775,7 +811,9 @@ function finalizeFlight(finalPos, duration, statusText) {
         progress: progress.toFixed(1)
     };
 
-    document.getElementById('download-log-btn').disabled = false;
+    const logBtn = document.getElementById('download-log-btn');
+    if (logBtn) logBtn.disabled = false;
 }
 
+// 啟動場景
 resetScene();
