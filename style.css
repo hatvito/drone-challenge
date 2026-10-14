@@ -229,6 +229,7 @@ textarea:focus {
     flex: 1;
     position: relative;
     background-color: #0c0d10;
+    overflow: hidden;
 }
 
 #hud {
@@ -241,30 +242,30 @@ textarea:focus {
     text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.8);
     pointer-events: none;
     line-height: 1.6;
+    z-index: 5;
 }
 
-/* 視角切換器樣式 */
+/* 視角切換器樣式 (鎖定右上角) */
 #camera-modes {
     position: absolute;
     top: 16px;
-    right: 20px;
+    right: 24px;
     display: flex;
-    background: rgba(30, 30, 36, 0.85);
+    background: rgba(22, 22, 28, 0.9);
     border: 1px solid #3d3d4d;
-    border-radius: 20px;
-    padding: 3px;
-    gap: 4px;
-    backdrop-filter: blur(4px);
-    z-index: 10;
+    border-radius: 8px;
+    padding: 4px;
+    gap: 6px;
+    z-index: 100;
 }
 
 .cam-btn {
     background: transparent;
-    border: none;
-    color: #8c8c9e;
-    font-size: 0.8rem;
+    border: 1px solid transparent;
+    color: #9aa0a6;
+    font-size: 0.82rem;
     padding: 6px 14px;
-    border-radius: 16px;
+    border-radius: 6px;
     cursor: pointer;
     font-weight: bold;
     transition: all 0.2s;
@@ -272,11 +273,13 @@ textarea:focus {
 
 .cam-btn:hover {
     color: #fff;
+    background: rgba(255, 255, 255, 0.08);
 }
 
 .cam-btn.active {
     background-color: #00d2ff;
     color: #121214;
+    border-color: #00d2ff;
 }
 
 #controls-hint {
@@ -289,6 +292,7 @@ textarea:focus {
     background: rgba(0, 0, 0, 0.5);
     padding: 6px 12px;
     border-radius: 4px;
+    z-index: 5;
 }
 
 /* 彈窗樣式 */
@@ -302,7 +306,7 @@ textarea:focus {
     display: none;
     align-items: center;
     justify-content: center;
-    z-index: 100;
+    z-index: 1000;
 }
 
 .modal-content {
