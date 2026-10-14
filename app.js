@@ -3,9 +3,14 @@ const DEFAULT_CONTROLLER_CODE = `// 無人機自主避障控制器 (高密度雷
 class StudentController {
     constructor(goal_pos) {
         this.goal = goal_pos;
-        this.speed = 10.0;
-        this.cruise_altitude = 8.0;
 
+        // ★ 核心運動與感知參數 (可自行微調)
+        this.speed = 10.0;              // 最高巡航速度 (m/s，建議 6~14)
+        this.cruise_altitude = 8.0;     // 基準巡航高度 (m)
+        this.sensorRange = 10.0;        // 雷達探測半徑 (m)
+        this.repulsePower = 12.0;       // 避障排斥力強度 (數值越大閃越開)
+
+        // 脫困狀態機參數
         this.history = [];
         this.escapeTimer = 0.0;
         this.escapeDir = [0, 0, 0];
@@ -58,15 +63,13 @@ class StudentController {
         let fx = (dx / distGoal) * 2.0;
         let fz = (dz / distGoal) * 2.0;
 
-        const sensorRange = 10.0;
         const numRays = 16;
         for (let i = 0; i < numRays; i++) {
             const angle = (Math.PI * 2 / numRays) * i;
             const rx = Math.cos(angle), rz = Math.sin(angle);
-            const dist = raycast_func(current_pos, [rx, 0, rz], sensorRange);
-            if (dist < sensorRange) {
-                // 接近時斥力呈非線性平方爆發，防止煞車不及
-                const rep = (1.0 / Math.max(dist, 0.1) - 1.0 / sensorRange) * 12.0;
+            const dist = raycast_func(current_pos, [rx, 0, rz], this.sensorRange);
+            if (dist < this.sensorRange) {
+                const rep = (1.0 / Math.max(dist, 0.1) - 1.0 / this.sensorRange) * this.repulsePower;
                 fx -= rx * rep;
                 fz -= rz * rep;
             }
@@ -85,7 +88,20 @@ class StudentController {
     }
 }`;
 
-document.getElementById('controller-code').value = DEFAULT_CONTROLLER_CODE;
+// 載入 localStorage 暫存或預設代碼
+const codeTextarea = document.getElementById('controller-code');
+const savedCode = localStorage.getItem('drone_student_code');
+codeTextarea.value = savedCode ? savedCode : DEFAULT_CONTROLLER_CODE;
+
+// 輸入變更自動儲存提示
+let saveTimeout = null;
+codeTextarea.addEventListener('input', () => {
+    localStorage.setItem('drone_student_code', codeTextarea.value);
+    const hint = document.getElementById('save-hint');
+    hint.style.display = 'inline';
+    clearTimeout(saveTimeout);
+    saveTimeout = setTimeout(() => hint.style.display = 'none', 1500);
+});
 
 // ------------------ 3D 視覺化場景初始化 ------------------
 const viewer = document.getElementById('viewer');
@@ -93,14 +109,16 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x0c0d10);
 
 const camera = new THREE.PerspectiveCamera(45, viewer.clientWidth / viewer.clientHeight, 1, 1000);
-camera.position.set(50, 120, -50);
+const DEFAULT_CAM_POS = new THREE.Vector3(50, 120, -50);
+const DEFAULT_CAM_TARGET = new THREE.Vector3(50, 0, 50);
+camera.position.copy(DEFAULT_CAM_POS);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(viewer.clientWidth, viewer.clientHeight);
 viewer.appendChild(renderer.domElement);
 
 const controls = new THREE.OrbitControls(camera, renderer.domElement);
-controls.target.set(50, 0, 50);
+controls.target.copy(DEFAULT_CAM_TARGET);
 controls.mouseButtons = {
     LEFT: THREE.MOUSE.PAN,
     RIGHT: THREE.MOUSE.ROTATE
@@ -109,7 +127,28 @@ controls.enableDamping = true;
 controls.dampingFactor = 0.05;
 controls.maxPolarAngle = Math.PI / 2 - 0.05;
 
-// 光照系統 (立體灰色長方體明暗)
+// 視角模式控制 (orbit: 上帝全景, follow: 機載跟隨)
+let cameraMode = 'orbit';
+const camOrbitBtn = document.getElementById('cam-orbit-btn');
+const camFollowBtn = document.getElementById('cam-follow-btn');
+
+camOrbitBtn.addEventListener('click', () => {
+    cameraMode = 'orbit';
+    camOrbitBtn.classList.add('active');
+    camFollowBtn.classList.remove('active');
+    controls.enabled = true;
+    camera.position.copy(DEFAULT_CAM_POS);
+    controls.target.copy(DEFAULT_CAM_TARGET);
+});
+
+camFollowBtn.addEventListener('click', () => {
+    cameraMode = 'follow';
+    camFollowBtn.classList.add('active');
+    camOrbitBtn.classList.remove('active');
+    controls.enabled = false; // 跟隨模式下鎖定 Orbit 手動控制
+});
+
+// 光照系統
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.75);
 scene.add(ambientLight);
 
@@ -220,9 +259,37 @@ window.addEventListener('resize', () => {
     renderer.setSize(viewer.clientWidth, viewer.clientHeight);
 });
 
+// 當前動態速度（供相機朝向平滑運算）
+let activeVelocity = [1, 0, 1];
+
 function animate() {
     requestAnimationFrame(animate);
-    controls.update();
+
+    if (cameraMode === 'orbit') {
+        controls.update();
+    } else if (cameraMode === 'follow') {
+        // 跟隨模式：動態計算無人機後方位置
+        const dp = droneMesh.position;
+        const vLen = Math.hypot(activeVelocity[0], activeVelocity[2]) || 1.0;
+        const backX = - (activeVelocity[0] / vLen);
+        const backZ = - (activeVelocity[2] / vLen);
+
+        // 相機置於無人機後方 4.5 公尺、高 2.2 公尺
+        const targetCamX = dp.x + backX * 4.5;
+        const targetCamY = dp.y + 2.2;
+        const targetCamZ = dp.z + backZ * 4.5;
+
+        // 平滑內插移動相機
+        camera.position.lerp(new THREE.Vector3(targetCamX, targetCamY, targetCamZ), 0.1);
+        // 鏡頭看著無人機前方 2.0 公尺處，提升開闊感
+        const lookTarget = new THREE.Vector3(
+            dp.x + (activeVelocity[0] / vLen) * 2.0,
+            dp.y + 0.3,
+            dp.z + (activeVelocity[2] / vLen) * 2.0
+        );
+        camera.lookAt(lookTarget);
+    }
+
     renderer.render(scene, camera);
 }
 animate();
@@ -468,6 +535,7 @@ function resetScene() {
     buildCity(seed);
     clearTrail();
     droneMesh.position.set(...START_POS);
+    activeVelocity = [1, 0, 1];
     document.getElementById('flight-status').innerText = "準備就緒";
     document.getElementById('flight-status').style.color = "#bbb";
     document.getElementById('flight-time').innerText = "0.00";
@@ -555,6 +623,7 @@ document.getElementById('run-btn').addEventListener('click', () => {
     let controllerInstance = null;
     try {
         const code = document.getElementById('controller-code').value;
+        localStorage.setItem('drone_student_code', code);
         const factory = new Function(`${code}; return new StudentController([${GOAL_POS.join(',')}]);`);
         controllerInstance = factory();
     } catch (err) {
@@ -605,6 +674,8 @@ document.getElementById('run-btn').addEventListener('click', () => {
             alert("控制器執行錯誤: " + err.message);
             return;
         }
+
+        activeVelocity = vel;
 
         if (sampleCounter % 6 === 0) {
             flightLogs.push({
